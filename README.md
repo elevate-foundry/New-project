@@ -22,6 +22,10 @@ npm start
 
 The server listens on `http://localhost:3000` by default.
 
+**Persistent Memory:**
+
+Conversation history is stored in SQLite at `data/conversations.db`. User profiles are stored at `data/profiles.json`.
+
 ## Run
 
 ```sh

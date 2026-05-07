@@ -14,8 +14,8 @@ Sal can also talk to a local Ollama model as an adapter over those primitives.
 **Clone and bootstrap:**
 
 ```bash
-git clone <repo-url>
-cd New project
+git clone https://github.com/elevate-foundry/New-project.git
+cd New-project
 npm install
 npm start
 ```

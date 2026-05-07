@@ -356,7 +356,8 @@ async function route(request, response) {
       
       response.write(`data: ${JSON.stringify({
         done: true,
-        fullMessage: cachedResponse.message,
+        final: cachedResponse.message,
+        fullMessage: cachedResponse.message, // Legacy field for backward compatibility
         tokenCount: cachedResponse.tokenCount,
         model: cachedResponse.model,
         tokensPerSecond: system.getAverageTokenSpeed(),
@@ -521,7 +522,8 @@ async function route(request, response) {
             
             response.write(`data: ${JSON.stringify({
               done: true,
-              fullMessage: chunk.fullMessage,
+              final: chunk.fullMessage,
+              fullMessage: chunk.fullMessage, // Legacy field for backward compatibility
               tokenCount: chunk.tokenCount,
               model: chunk.model,
               tokensPerSecond: system.getAverageTokenSpeed(),
@@ -536,6 +538,7 @@ async function route(request, response) {
                   response.write(`data: ${JSON.stringify({
                     braidToken: braidChunk.token,
                     braidFullMessage: braidChunk.fullMessage,
+                    braidFinal: braidChunk.fullMessage, // Add final field for braid
                     braidDone: braidChunk.done,
                     braidModel: braidChunk.model
                   })}\n\n`);
@@ -673,10 +676,16 @@ async function route(request, response) {
       }
     });
     return send(response, 200, {
-      model: race.braid.model,
-      message: race.braid.message,
-      done: true,
-      race
+      final: race.braid.message,
+      debug: {
+        model: race.braid.model,
+        model_votes: responses.map(r => ({ model: r.model, ok: r.ok, latencyMs: r.latencyMs })),
+        winner: race.winner,
+        requestId: race.requestId,
+        startedAt: race.startedAt,
+        completedAt: race.completedAt
+      },
+      done: true
     });
   }
 

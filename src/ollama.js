@@ -236,7 +236,7 @@ export class OllamaService {
     const braidPrompt = [
       `Original user prompt: "${prompt}"`,
       '',
-      'Multiple AI models have responded to this prompt. Your task is to synthesize their responses into one excellent answer.',
+      'You are synthesizing multiple AI model responses. CRITICAL: Your output must be ONLY the final answer to the user.',
       '',
       'Model responses:',
       peerResponses,
@@ -247,8 +247,12 @@ export class OllamaService {
       '3. Remove redundancy and contradictions',
       '4. Maintain the user\'s tone and address them directly',
       '5. Keep the answer concise but complete',
+      '6. DO NOT include phrases like "This response synthesizes...", "Based on the responses...", "The models agree that..."',
+      '7. DO NOT explain your synthesis process - just give the answer',
       '',
-      'Produce the braided response now:'
+      'Output ONLY the final answer. No meta-commentary. No preamble. No explanation of how you combined the responses.',
+      '',
+      'Final answer:'
     ].join('\n');
     const model = winner?.model ?? this.model;
     const braided = await this.chatWithModel({
@@ -257,9 +261,13 @@ export class OllamaService {
       context: { ...context, braid: true },
       requestId: responses[0]?.requestId ?? `race_${Date.now()}`
     });
+    
+    // Post-process to strip any remaining meta-commentary
+    let cleanedMessage = this.stripMetaCommentary(braided.message);
+    
     return {
       model,
-      message: braided.message,
+      message: cleanedMessage,
       ok: braided.ok,
       startedAt: braided.startedAt,
       completedAt: braided.completedAt,
@@ -275,7 +283,7 @@ export class OllamaService {
     const braidPrompt = [
       `Original user prompt: "${prompt}"`,
       '',
-      'Multiple AI models have responded to this prompt. Your task is to synthesize their responses into one excellent answer.',
+      'You are synthesizing multiple AI model responses. CRITICAL: Your output must be ONLY the final answer to the user.',
       '',
       'Model responses:',
       peerResponses,
@@ -286,8 +294,12 @@ export class OllamaService {
       '3. Remove redundancy and contradictions',
       '4. Maintain the user\'s tone and address them directly',
       '5. Keep the answer concise but complete',
+      '6. DO NOT include phrases like "This response synthesizes...", "Based on the responses...", "The models agree that..."',
+      '7. DO NOT explain your synthesis process - just give the answer',
       '',
-      'Produce the braided response now:'
+      'Output ONLY the final answer. No meta-commentary. No preamble. No explanation of how you combined the responses.',
+      '',
+      'Final answer:'
     ].join('\n');
     const model = winner?.model ?? this.model;
     const requestId = responses[0]?.requestId ?? `braid_${Date.now()}`;
@@ -354,9 +366,12 @@ export class OllamaService {
       const completedAt = new Date().toISOString();
       const latencyMs = Math.round(performance.now() - started);
       
+      // Post-process to strip meta-commentary from the final message
+      const cleanedMessage = this.stripMetaCommentary(fullMessage);
+      
       yield {
         token: null,
-        fullMessage,
+        fullMessage: cleanedMessage,
         tokenCount,
         done: true,
         model,
@@ -405,6 +420,36 @@ export class OllamaService {
         num_keep: 0
       }
     };
+  }
+
+  stripMetaCommentary(message) {
+    if (!message) return '';
+    
+    // Patterns that indicate meta-commentary about synthesis
+    const metaPatterns = [
+      /^This response synthesizes[\s\S]*?$/m,
+      /^Based on the responses[\s\S]*?$/m,
+      /^The models agree that[\s\S]*?$/m,
+      /^Combining the insights[\s\S]*?$/m,
+      /^After reviewing the responses[\s\S]*?$/m,
+      /^Synthesizing the above[\s\S]*?$/m,
+      /^The braided response[\s\S]*?$/m,
+      /^Here is the synthesized[\s\S]*?$/m,
+      /^Taking into account[\s\S]*?$/m,
+      /^Considering all responses[\s\S]*?$/m,
+    ];
+    
+    let cleaned = message;
+    
+    // Remove meta-commentary at the start
+    for (const pattern of metaPatterns) {
+      cleaned = cleaned.replace(pattern, '');
+    }
+    
+    // Remove empty lines at the start
+    cleaned = cleaned.replace(/^\s+/, '');
+    
+    return cleaned;
   }
 
   systemPrompt() {

@@ -3,6 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Sal Chat</title>
     <style>
       :root {
@@ -349,6 +352,32 @@
         }
       }
 
+      .thinking-spinner {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        background: var(--bg-secondary);
+        border-radius: 12px;
+        color: var(--text-secondary);
+        font-size: 13px;
+      }
+
+      .spinner-ring {
+        width: 16px;
+        height: 16px;
+        border: 2px solid var(--bg-tertiary);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
       .model-indicator {
         font-size: 12px;
         color: var(--text-secondary);
@@ -449,6 +478,9 @@
             <span>Tokens/sec:</span>
             <span class="throughput-value" id="throughputValue">—</span>
           </div>
+          <button id="ttsToggle" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;">
+            🔊 TTS
+          </button>
           <div style="font-size: 11px; color: var(--text-secondary); font-family: monospace;">
             BBID: <span id="bbidDisplay" style="color: var(--accent);">—</span>
           </div>
@@ -472,6 +504,9 @@
     </div>
 
     <script>
+      // Cache busting
+      console.log('Script loaded - version:', Date.now());
+      
       const state = {
         bbid: null,
         bbidDevice: JSON.parse(localStorage.getItem('brailleBuddy.bbid.device') || 'null'),
@@ -483,6 +518,8 @@
         colorWheelIndex: 0,
         throughputHistory: [],
         currentTokenCount: 0,
+        ttsEnabled: true,
+        currentUtterance: null,
         generationStartTime: null,
         animationFrameId: null
       };
@@ -513,6 +550,47 @@
 
       function toBraille(text) {
         return text.split('').map(char => brailleMap[char] || char).join('');
+      }
+
+      function toBrailleSkipCodeBlocks(text) {
+        // Detect code blocks and skip transliterating them
+        const codeBlockPattern = /```[\s\S]*?```/g;
+        const svgPattern = /<svg[\s\S]*?<\/svg>/gi;
+        let result = '';
+        let lastIndex = 0;
+        let match;
+        
+        // Combine patterns to skip both code blocks and SVG
+        const allPatterns = [codeBlockPattern, svgPattern];
+        let matches = [];
+        
+        for (const pattern of allPatterns) {
+          let patternMatch;
+          while ((patternMatch = pattern.exec(text)) !== null) {
+            matches.push({
+              index: patternMatch.index,
+              length: patternMatch[0].length,
+              text: patternMatch[0]
+            });
+          }
+          pattern.lastIndex = 0; // Reset pattern for next use
+        }
+        
+        // Sort matches by index
+        matches.sort((a, b) => a.index - b.index);
+        
+        for (const match of matches) {
+          // Transliterate text before the match
+          result += toBraille(text.slice(lastIndex, match.index));
+          // Add the matched content as-is (not transliterated)
+          result += match.text;
+          lastIndex = match.index + match.length;
+        }
+        
+        // Transliterate any remaining text after the last match
+        result += toBraille(text.slice(lastIndex));
+        
+        return result;
       }
 
       async function ensureDeviceBBID() {
@@ -697,7 +775,7 @@
                   <span class="message-role">Sal</span>
                   <span class="message-model">${msg.modelInfo || 'Loading...'}</span>
                 </div>
-                <div class="message-content">${escapeHtml(msg.content) || '<span class="loading-dots">...</span>'}</div>
+                <div class="message-content">${escapeHtml(msg.content) || '<div class="thinking-spinner"><div class="spinner-ring"></div><span>Thinking...</span></div>'}</div>
                 ${racingHtml}
                 <div class="message-meta">
                   <span class="message-time">${formatTimestamp(msg.timestamp)}</span>
@@ -845,18 +923,26 @@
                     
                     console.log('Done event - assistantMessageIndex:', assistantMessageIndex, 'state.messages.length:', state.messages.length);
                     
-                    // Use fullMessage if no tokens were streamed (non-streaming endpoint)
-                    if (data.fullMessage && !state.messages[assistantMessageIndex].content) {
-                      state.messages[assistantMessageIndex].content = data.fullMessage;
-                      console.log('Set message content from fullMessage, length:', data.fullMessage.length);
+                    // Use 'final' field if available, otherwise fall back to 'fullMessage' for backward compatibility
+                    const userFacingMessage = data.final || data.fullMessage;
+                    
+                    // Speak the complete message if TTS is enabled
+                    if (userFacingMessage) {
+                      speakText(userFacingMessage);
+                    }
+                    
+                    // Use final/fullMessage if no tokens were streamed (non-streaming endpoint)
+                    if (userFacingMessage && !state.messages[assistantMessageIndex].content) {
+                      state.messages[assistantMessageIndex].content = userFacingMessage;
+                      console.log('Set message content from final/fullMessage, length:', userFacingMessage.length);
                     }
                     
                     state.messages[assistantMessageIndex].modelInfo = 
                       `${model} (${tokensPerSecond.toFixed(1)} tok/s)${modeLabel}`;
                     
-                    // Show braille in header for the complete response
-                    if (data.fullMessage && !data.braidFullMessage) {
-                      const brailleText = toBraille(data.fullMessage);
+                    // Show braille in header for the complete response (skip code blocks)
+                    if (userFacingMessage && !data.braidFullMessage) {
+                      const brailleText = toBrailleSkipCodeBlocks(userFacingMessage);
                       console.log('Setting braille stream, length:', brailleText.length);
                       const brailleStream = document.getElementById('brailleStream');
                       if (brailleStream) {
@@ -866,7 +952,7 @@
                         console.log('Braille stream element not found');
                       }
                     } else {
-                      console.log('Braille not set - fullMessage:', !!data.fullMessage, 'braidFullMessage:', !!data.braidFullMessage);
+                      console.log('Braille not set - final/fullMessage:', !!userFacingMessage, 'braidFullMessage:', !!data.braidFullMessage);
                     }
                   }
 
@@ -883,8 +969,10 @@
                   if (data.braidDone) {
                     console.log('Braid done - clearing braille stream');
                     $('brailleStream').textContent = '';
-                    if (data.braidFullMessage) {
-                      state.messages[assistantMessageIndex].content = data.braidFullMessage;
+                    // Use braidFinal if available, otherwise fall back to braidFullMessage
+                    const braidUserMessage = data.braidFinal || data.braidFullMessage;
+                    if (braidUserMessage) {
+                      state.messages[assistantMessageIndex].content = braidUserMessage;
                       state.messages[assistantMessageIndex].modelInfo = 
                         `${braidModel} (braided ✨)`;
                     }
@@ -936,6 +1024,68 @@
           sendMessage();
         }
       });
+
+      // TTS Toggle
+      $('ttsToggle').addEventListener('click', () => {
+        state.ttsEnabled = !state.ttsEnabled;
+        $('ttsToggle').textContent = state.ttsEnabled ? '🔊 TTS On' : '🔇 TTS Off';
+        $('ttsToggle').style.background = state.ttsEnabled ? 'var(--accent)' : 'var(--bg-tertiary)';
+        $('ttsToggle').style.color = state.ttsEnabled ? 'white' : 'var(--text-primary)';
+        
+        // Stop current speech if disabling
+        if (!state.ttsEnabled && state.currentUtterance) {
+          window.speechSynthesis.cancel();
+          state.currentUtterance = null;
+        }
+      });
+
+      // Initialize TTS button state
+      $('ttsToggle').textContent = state.ttsEnabled ? '🔊 TTS On' : '🔇 TTS Off';
+      $('ttsToggle').style.background = state.ttsEnabled ? 'var(--accent)' : 'var(--bg-tertiary)';
+      $('ttsToggle').style.color = state.ttsEnabled ? 'white' : 'var(--text-primary)';
+
+      function speakText(text) {
+        if (!state.ttsEnabled || !text) return;
+        
+        // Cancel any current speech
+        window.speechSynthesis.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+        
+        // Try to use a good voice
+        const voices = window.speechSynthesis.getVoices();
+        const preferredVoice = voices.find(voice => 
+          voice.name.includes('Daniel') || 
+          voice.name.includes('Alex') || 
+          voice.name.includes('Google US English')
+        );
+        if (preferredVoice) {
+          utterance.voice = preferredVoice;
+        }
+        
+        utterance.onend = () => {
+          state.currentUtterance = null;
+        };
+        
+        utterance.onerror = (event) => {
+          console.error('TTS error:', event.error);
+          state.currentUtterance = null;
+        };
+        
+        state.currentUtterance = utterance;
+        window.speechSynthesis.speak(utterance);
+      }
+
+      // Load voices when available
+      if (window.speechSynthesis) {
+        window.speechSynthesis.onvoiceschanged = () => {
+          const voices = window.speechSynthesis.getVoices();
+          console.log('Available TTS voices:', voices.length);
+        };
+      }
 
       $('messageInput').addEventListener('input', (e) => {
         e.target.style.height = 'auto';

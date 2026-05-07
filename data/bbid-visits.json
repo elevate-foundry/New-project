@@ -1,0 +1,66 @@
+{
+  "bbid_6e149db9a4e28050": {
+    "bbid": "bbid_6e149db9a4e28050",
+    "braille": "bbid_6e149db9a4e28050",
+    "infrastructure": "BrailleBuddy Identity",
+    "kind": "device",
+    "isFirstVisit": false,
+    "visitCount": 9,
+    "firstSeenAt": "2026-05-07T00:17:57.958Z",
+    "lastSeenAt": "2026-05-07T00:29:22.646Z",
+    "modalities": [
+      "voice",
+      "text",
+      "braille",
+      "haptic"
+    ]
+  },
+  "bbid_1df2bcca17ed1843": {
+    "bbid": "bbid_1df2bcca17ed1843",
+    "braille": "bbid_1df2bcca17ed1843",
+    "infrastructure": "BrailleBuddy Identity",
+    "kind": "device",
+    "isFirstVisit": false,
+    "visitCount": 2,
+    "firstSeenAt": "2026-05-07T00:22:43.606Z",
+    "lastSeenAt": "2026-05-07T00:22:44.510Z",
+    "modalities": [
+      "voice",
+      "text",
+      "braille",
+      "haptic"
+    ]
+  },
+  "bbid_03d5b772a7a92a05": {
+    "bbid": "bbid_03d5b772a7a92a05",
+    "braille": "bbid_03d5b772a7a92a05",
+    "infrastructure": "BrailleBuddy Identity",
+    "kind": "device",
+    "isFirstVisit": false,
+    "visitCount": 40,
+    "firstSeenAt": "2026-05-07T00:31:09.933Z",
+    "lastSeenAt": "2026-05-07T02:04:07.196Z",
+    "modalities": [
+      "voice",
+      "text",
+      "braille",
+      "haptic"
+    ]
+  },
+  "bbid_1e9faad8c4318150": {
+    "bbid": "bbid_1e9faad8c4318150",
+    "braille": "bbid_1e9faad8c4318150",
+    "infrastructure": "BrailleBuddy Identity",
+    "kind": "device",
+    "isFirstVisit": false,
+    "visitCount": 119,
+    "firstSeenAt": "2026-05-07T00:34:47.426Z",
+    "lastSeenAt": "2026-05-07T02:02:24.913Z",
+    "modalities": [
+      "voice",
+      "text",
+      "braille",
+      "haptic"
+    ]
+  }
+}

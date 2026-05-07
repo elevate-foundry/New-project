@@ -1,0 +1,17 @@
+{
+  "name": "primitive-system",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A small system built from auth, webhooks, and money primitives.",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=23"
+  },
+  "devDependencies": {
+    "playwright": "^1.59.1"
+  }
+}

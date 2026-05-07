@@ -31,8 +31,38 @@ export class ConversationService {
         FOREIGN KEY (bbid) REFERENCES conversations(bbid) ON DELETE CASCADE
       );
 
+      CREATE TABLE IF NOT EXISTS model_responses (
+        id TEXT PRIMARY KEY,
+        model TEXT NOT NULL,
+        content TEXT NOT NULL,
+        token_count INTEGER NOT NULL,
+        timestamp TEXT NOT NULL,
+        latency_ms REAL,
+        tokens_per_second REAL
+      );
+
+      CREATE TABLE IF NOT EXISTS braided_responses (
+        id TEXT PRIMARY KEY,
+        content TEXT NOT NULL,
+        token_count INTEGER NOT NULL,
+        model TEXT,
+        timestamp TEXT NOT NULL,
+        component_count INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS braid_components (
+        braid_id TEXT NOT NULL,
+        response_id TEXT NOT NULL,
+        PRIMARY KEY (braid_id, response_id),
+        FOREIGN KEY (braid_id) REFERENCES braided_responses(id) ON DELETE CASCADE,
+        FOREIGN KEY (response_id) REFERENCES model_responses(id) ON DELETE CASCADE
+      );
+
       CREATE INDEX IF NOT EXISTS idx_messages_bbid ON messages(bbid);
       CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_model_responses_model ON model_responses(model);
+      CREATE INDEX IF NOT EXISTS idx_model_responses_timestamp ON model_responses(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_braided_responses_timestamp ON braided_responses(timestamp);
     `);
   }
 
@@ -159,5 +189,78 @@ export class ConversationService {
 
   close() {
     this.db.close();
+  }
+
+  // Braiding provenance methods
+  storeModelResponse(response) {
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO model_responses (id, model, content, token_count, timestamp, latency_ms, tokens_per_second)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      response.id,
+      response.model,
+      response.content,
+      response.tokenCount,
+      response.timestamp,
+      response.latencyMs,
+      response.tokensPerSecond
+    );
+  }
+
+  storeBraid(braid, componentResponseIds) {
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO braided_responses (id, content, token_count, model, timestamp, component_count)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      braid.id,
+      braid.content,
+      braid.tokenCount,
+      braid.model,
+      braid.timestamp,
+      componentResponseIds.length
+    );
+
+    // Store braid components
+    const componentStmt = this.db.prepare(`
+      INSERT OR REPLACE INTO braid_components (braid_id, response_id)
+      VALUES (?, ?)
+    `);
+    for (const responseId of componentResponseIds) {
+      componentStmt.run(braid.id, responseId);
+    }
+  }
+
+  getBraidProvenance(braidId) {
+    const stmt = this.db.prepare(`
+      SELECT mr.* FROM model_responses mr
+      JOIN braid_components bc ON mr.id = bc.response_id
+      WHERE bc.braid_id = ?
+      ORDER BY mr.timestamp ASC
+    `);
+    return stmt.all(braidId);
+  }
+
+  getAllBraids(limit = 50) {
+    const stmt = this.db.prepare(`
+      SELECT * FROM braided_responses
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `);
+    return stmt.all(limit);
+  }
+
+  getModelStats(model) {
+    const stmt = this.db.prepare(`
+      SELECT 
+        COUNT(*) as responseCount,
+        AVG(tokens_per_second) as avgTokensPerSecond,
+        AVG(latency_ms) as avgLatencyMs
+      FROM model_responses
+      WHERE model = ?
+    `);
+    const result = stmt.get(model);
+    return result || null;
   }
 }

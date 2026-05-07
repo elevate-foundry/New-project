@@ -381,6 +381,39 @@ async function route(request, response) {
             const winner = successful.sort((left, right) => right.message.length - left.message.length)[0] ?? responses[0];
             const braid = await system.ollama.braidResponses({ prompt: json.prompt, context, responses, winner });
             
+            // Store braiding provenance in SQLite
+            const componentResponseIds = [];
+            for (const response of successful) {
+              const responseId = `${requestId}_${response.model}_${Date.now()}`;
+              try {
+                system.conversations.storeModelResponse({
+                  id: responseId,
+                  model: response.model,
+                  content: response.message,
+                  tokenCount: response.message.split(/\s+/).length,
+                  timestamp: new Date().toISOString(),
+                  latencyMs: response.latencyMs || 0,
+                  tokensPerSecond: response.tokensPerSecond || 0
+                });
+                componentResponseIds.push(responseId);
+              } catch (error) {
+                console.error('Failed to store model response in SQLite:', error);
+              }
+            }
+            
+            try {
+              const braidId = `${requestId}_braid_${Date.now()}`;
+              system.conversations.storeBraid({
+                id: braidId,
+                content: braid.message,
+                tokenCount: braid.message.split(/\s+/).length,
+                model: braid.model,
+                timestamp: new Date().toISOString()
+              }, componentResponseIds);
+            } catch (error) {
+              console.error('Failed to store braid in SQLite:', error);
+            }
+            
             system.cache.set(json.prompt, {
               message: braid.message,
               tokenCount: braid.message.split(/\s+/).length,
@@ -410,7 +443,44 @@ async function route(request, response) {
             const successful = responses.filter((response) => response.ok && response.message);
             if (successful.length > 0) {
               const winner = successful.sort((left, right) => right.message.length - left.message.length)[0];
+              
+              // Store braiding provenance in SQLite
+              const componentResponseIds = [];
+              for (const response of successful) {
+                const responseId = `${requestId}_${response.model}_${Date.now()}`;
+                try {
+                  system.conversations.storeModelResponse({
+                    id: responseId,
+                    model: response.model,
+                    content: response.message,
+                    tokenCount: response.message.split(/\s+/).length,
+                    timestamp: new Date().toISOString(),
+                    latencyMs: response.latencyMs || 0,
+                    tokensPerSecond: response.tokensPerSecond || 0
+                  });
+                  componentResponseIds.push(responseId);
+                } catch (error) {
+                  console.error('Failed to store model response in SQLite:', error);
+                }
+              }
+              
               braidStream = system.ollama.streamBraidResponses({ prompt: json.prompt, context, responses: successful, winner });
+              
+              // Store braided response in SQLite when it completes
+              braidStream.then((braid) => {
+                try {
+                  const braidId = `${requestId}_braid_${Date.now()}`;
+                  system.conversations.storeBraid({
+                    id: braidId,
+                    content: braid.message,
+                    tokenCount: braid.tokenCount,
+                    model: braid.model,
+                    timestamp: new Date().toISOString()
+                  }, componentResponseIds);
+                } catch (error) {
+                  console.error('Failed to store streaming braid in SQLite:', error);
+                }
+              });
               
               console.log(`[${requestId}] Braid streaming started with ${successful.length} models`);
             }

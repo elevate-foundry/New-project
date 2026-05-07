@@ -3,6 +3,7 @@ import { AuthService } from './auth.js';
 import { BBIDService } from './bbid.js';
 import { CacheService } from './cache.js';
 import { ConversationService } from './conversations.js';
+// import { GraphService } from './graph.js';
 import { MoneyService } from './money.js';
 import { OllamaService } from './ollama.js';
 import { OpenRouterService } from './openrouter.js';
@@ -20,6 +21,7 @@ export function createSystem(options = {}) {
   const profiles = new ProfileService(options.profiles);
   const races = new RaceStore(options.races);
   const conversations = new ConversationService(options.conversations);
+  // const graph = new GraphService(options.graph);
   const money = new MoneyService({
     ...options.money,
     emit: (eventType, payload) => {
@@ -53,6 +55,7 @@ export function createSystem(options = {}) {
     bbid, 
     cache, 
     conversations,
+    // graph,
     money, 
     ollama, 
     openrouter, 

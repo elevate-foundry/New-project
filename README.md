@@ -26,6 +26,10 @@ The server listens on `http://localhost:3000` by default.
 
 Conversation history is stored in SQLite at `data/conversations.db`. User profiles are stored at `data/profiles.json`.
 
+**Braiding Provenance:**
+
+Individual model responses and braided outputs are stored in SQLite for graph-like querying. The `model_responses` table stores individual model outputs, `braided_responses` stores the final combined outputs, and `braid_components` tracks the relationships between component responses and braided outputs.
+
 ## Run
 
 ```sh

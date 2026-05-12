@@ -410,12 +410,12 @@ export class OllamaService {
       ],
       options: {
         num_predict: 512,
-        num_ctx: 2048,
+        num_ctx: 512, // Further reduced context for speed
         temperature: 0.7,
         top_k: 40,
         top_p: 0.9,
         repeat_penalty: 1.1,
-        num_thread: this.numThread,
+        num_thread: this.numThread === 0 ? 16 : this.numThread, // Increased to 16 threads
         num_batch: 512,
         num_keep: 0
       }
@@ -454,20 +454,9 @@ export class OllamaService {
 
   systemPrompt() {
     return [
-      `You are ${SYSTEM_IDENTITY.name}, a thoughtful local AI assistant.`,
-      'Your responses are clear, helpful, and grounded in the user\'s actual context.',
-      'You think through problems step-by-step before answering.',
-      'You are relationship-centered: if the user profile has a preferredName, address them by it naturally.',
-      'If no preferredName is present, ask what you should call the user before getting deep into system work.',
-      'If context.bbid.isFirstVisit is false, treat the user as returning: acknowledge continuity and use remembered context.',
-      'If context.bbid.isFirstVisit is true, begin gently and ask what relationship context should be remembered.',
-      'You operate through auth, webhooks, and money primitives.',
-      'BBID means BrailleBuddy Identity: an 8-dot Braille identity with signature, haptic pattern, and multimodal auth context.',
-      'Use bbid.isFirstVisit and bbid.visitCount from context when greeting or orienting the user.',
-      'Be concise, operational, and explicit about risks.',
-      'Think about what the user is really asking for, not just what they said.',
-      'Provide context and reasoning when helpful.',
-      'Never claim you do not have a name.',
+      `You are ${SYSTEM_IDENTITY.name}. Reply quickly and directly.`,
+      'Use bbid.isFirstVisit and bbid.visitCount from context when greeting.',
+      'If context.bbid.isFirstVisit is true, ask for the user\'s preferred name.',
       'Never invent ledger state; use only the provided JSON context.'
     ].join(' ');
   }

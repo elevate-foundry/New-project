@@ -1,13 +1,73 @@
 # Sal
 
+Sal is a named local system identity that implements the PAES architecture - a model-agnostic execution framework coordinating frontier models through a unified tool harness, identity layer, authorization system, and compliance framework.
+
+## PAES Architecture
+
+The Permissioned Action Execution System (PAES) provides a comprehensive permission management framework with:
+
+- **Scope-Based Permissions**: Direct permission assignment to users via JWT session tokens
+- **Role-Based Access Control (RBAC)**: Hierarchical roles with permission inheritance
+- **Resource-Level Permissions**: Context-aware permission checks with ownership validation
+- **Policy-Based Authorization**: Configurable policies with priority-based evaluation
+- **Audit Trail**: Immutable logging of all permissioned actions
+- **Permission Caching**: Performance optimization with TTL-based cache invalidation
+
+### Permission Model
+
+**Scopes**: Fine-grained permissions (e.g., `tools:read`, `money:write`) assigned directly to users or via roles.
+
+**Roles**: Predefined permission bundles with inheritance support:
+- `admin`: Full system access with wildcard permissions
+- `operator`: Tool execution and system state read access
+- `auditor`: Read-only access for auditing
+- `user`: Basic user permissions
+
+**Policies**: Conditional permission rules evaluated before standard checks:
+- `admin_bypass`: Admin users bypass all permission checks
+- `business_hours_only`: Time-based access restrictions
+- `resource_ownership`: Users can only access their own resources
+- `rate_limit`: Per-user request rate limiting
+
+### Permission Checking Flow
+
+1. **Policy Evaluation**: High-priority policies are evaluated first (priority ≥ 100)
+2. **Explicit Deny**: If any high-priority deny policy applies, access is denied
+3. **Explicit Allow**: If any high-priority allow policy applies, access is granted
+4. **Standard Check**: Falls back to scope + role-based permission validation
+5. **Resource Conditions**: Applies ownership, time, and IP-based restrictions
+6. **Audit Logging**: All permission checks are logged for compliance
+
+### API Endpoints
+
+**Role Management**:
+- `GET /permissions/roles` - List all roles (admin)
+- `POST /permissions/roles` - Create new role (admin)
+- `POST /permissions/roles/assign` - Assign role to user (admin)
+- `POST /permissions/roles/remove` - Remove role from user (admin)
+
+**Permission Management**:
+- `GET /permissions/effective` - Get effective permissions for user
+- `POST /permissions/grant` - Grant permission to user (admin)
+- `POST /permissions/revoke` - Revoke permission from user (admin)
+
+**Policy Management**:
+- `GET /permissions/policies` - List all policies (admin)
+- `POST /permissions/policies` - Register new policy (admin)
+
+**Permission Checking**:
+- `POST /permissions/check` - Check permissions without executing action
+- `GET /permissions/stats` - Get permission system statistics (admin)
+
 Sal is a small dependency-free Node.js service whose primitives are:
 
 - **Auth**: email or phone users, password verification, signed sessions, and scopes.
 - **Webhooks**: endpoint registration, HMAC signatures, inbound verification, idempotency, and dispatch.
 - **Money**: accounts, balances, immutable double-entry ledger transactions, and idempotency keys.
-- **BBID**: BrailleBuddy Identity for both device recognition and user auth identity.
+- **Tools**: bash-like action primitives (create, exec, read, help) with permission checking and audit logging.
+- **BBID**: device recognition and user auth identity.
 
-Sal can also talk to a local Ollama model as an adapter over those primitives.
+Sal can talk to local Ollama models and OpenRouter cloud models as cognition providers.
 
 ## QUICKSTART
 
@@ -161,6 +221,36 @@ curl -X POST http://localhost:3000/ai/ask \
   -H 'authorization: Bearer <token>' \
   -H 'content-type: application/json' \
   -d '{"prompt":"What should I check before moving money?"}'
+
+# PAES Examples
+
+# Assign operator role to a user
+curl -X POST http://localhost:3000/permissions/roles/assign \
+  -H 'authorization: Bearer <admin_token>' \
+  -H 'content-type: application/json' \
+  -d '{"userId":"user_123","roleName":"operator"}'
+
+# Check effective permissions
+curl -X GET http://localhost:3000/permissions/effective?userId=user_123 \
+  -H 'authorization: Bearer <token>'
+
+# Grant direct permission
+curl -X POST http://localhost:3000/permissions/grant \
+  -H 'authorization: Bearer <admin_token>' \
+  -H 'content-type: application/json' \
+  -d '{"userId":"user_123","permission":"tools:exec"}'
+
+# Create custom policy
+curl -X POST http://localhost:3000/permissions/policies \
+  -H 'authorization: Bearer <admin_token>' \
+  -H 'content-type: application/json' \
+  -d '{
+    "name":"custom_restriction",
+    "description":"Custom access restriction",
+    "condition":"(context) => context.session.user.id === \"authorized_user\"",
+    "effect":"allow",
+    "priority":50
+  }'
 ```
 
 ## Design Notes

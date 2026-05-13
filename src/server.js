@@ -28,7 +28,12 @@ async function readBody(request) {
 }
 
 function send(response, status, value) {
-  response.writeHead(status, { 'content-type': 'application/json' });
+  response.writeHead(status, { 
+    'content-type': 'application/json',
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-headers': 'Content-Type, Authorization'
+  });
   response.end(JSON.stringify(value, null, 2));
 }
 
@@ -89,6 +94,30 @@ function actor(request, session = null) {
 
 async function route(request, response) {
   const url = new URL(request.url, `http://${request.headers.host}`);
+  
+  // Handle CORS preflight requests
+  if (request.method === 'OPTIONS') {
+    response.writeHead(200, {
+      'access-control-allow-origin': '*',
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
+      'access-control-allow-headers': 'Content-Type, Authorization, X-BBID',
+      'access-control-max-age': '86400'
+    });
+    response.end();
+    return;
+  }
+  
+  // Set BBID cookie if not present
+  const bbidCookie = request.headers.cookie?.match(/bbid=([^;]+)/)?.[1];
+  if (!bbidCookie) {
+    const newBbid = `bbid_${randomUUID()}`;
+    response.setHeader('Set-Cookie', `bbid=${newBbid}; Path=/; HttpOnly; SameSite=Lax`);
+  }
+  
+  if (request.method === 'GET' && url.pathname === '/') {
+    return send(response, 200, { status: 'ok', system: SYSTEM_IDENTITY });
+  }
+
   if (request.method === 'GET' && await sendStatic(response, url.pathname)) {
     return;
   }
@@ -311,7 +340,8 @@ async function route(request, response) {
       profile: system.profiles.get(bbid(request)),
       accounts: session ? system.money.listAccounts(session.user.id) : [],
       system: SYSTEM_IDENTITY,
-      primitives: ['auth', 'webhooks', 'money'],
+      primitives: ['auth', 'webhooks', 'money', 'tools'],
+      tools: system.tools.listTools(),
       conversationHistory: conversationContext
     };
     const hasRelationship = Boolean(context.profile?.preferredName);
@@ -328,7 +358,9 @@ async function route(request, response) {
       'content-type': 'text/event-stream',
       'cache-control': 'no-cache',
       'connection': 'keep-alive',
-      'access-control-allow-origin': '*'
+      'access-control-allow-origin': '*',
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
+      'access-control-allow-headers': 'Content-Type, Authorization'
     });
 
     const startTime = Date.now();
@@ -590,7 +622,8 @@ async function route(request, response) {
       profile: system.profiles.get(bbid(request)),
       accounts: session ? system.money.listAccounts(session.user.id) : [],
       system: SYSTEM_IDENTITY,
-      primitives: ['auth', 'webhooks', 'money']
+      primitives: ['auth', 'webhooks', 'money', 'tools'],
+      tools: system.tools.listTools()
     };
     const hasRelationship = Boolean(context.profile?.preferredName);
     context.relationship = {
@@ -603,12 +636,25 @@ async function route(request, response) {
     };
     const fast = json.fast === true;
     const hybrid = json.hybrid === true;
+    const iterative = json.iterative === true;
+    const iterations = Number(json.iterations ?? 3);
     let race;
     
     if (fast) {
       race = await system.ollama.fastChat({
         prompt: json.prompt,
         context
+      });
+    } else if (iterative) {
+      const ollamaModels = ['llama3.2:latest', 'mistral:latest', 'phi3.5:latest'];
+      const openrouterModels = system.openrouter.freeModels.slice(0, 3);
+      const allModels = [...ollamaModels, ...openrouterModels];
+      
+      race = await system.ollama.iterativeBraid({
+        prompt: json.prompt,
+        context,
+        models: allModels,
+        iterations
       });
     } else if (hybrid) {
       const requestId = `hybrid_${randomUUID()}`;
@@ -655,8 +701,12 @@ async function route(request, response) {
     await system.audit.append({
       type: 'ai.asked',
       actor: actor(request, session),
-      summary: fast 
+      summary: fast
         ? `Fast response from ${race.braid.model}.`
+        : iterative
+        ? `Iterative braiding: ${race.iterations} iterations with ${race.models.length} models; braided with ${race.braid.model}.`
+        : hybrid
+        ? `Hybrid mode: ${race.responses.length} models; braided with ${race.braid.model}.`
         : `Asked ${race.responses.length} models; braided with ${race.braid.model}.`,
       metadata: {
         requestId: race.requestId,
@@ -666,7 +716,10 @@ async function route(request, response) {
         promptLength: String(json.prompt ?? '').length,
         answerLength: race.braid.message.length,
         fast,
-        responseTimestamps: race.responses.map((response) => ({
+        hybrid,
+        iterative,
+        iterations: race.iterations ?? undefined,
+        responseTimestamps: race.responses?.map((response) => ({
           model: response.model,
           startedAt: response.startedAt,
           completedAt: response.completedAt,
@@ -679,7 +732,7 @@ async function route(request, response) {
       final: race.braid.message,
       debug: {
         model: race.braid.model,
-        model_votes: responses.map(r => ({ model: r.model, ok: r.ok, latencyMs: r.latencyMs })),
+        model_votes: race.responses.map(r => ({ model: r.model, ok: r.ok, latencyMs: r.latencyMs })),
         winner: race.winner,
         requestId: race.requestId,
         startedAt: race.startedAt,
@@ -696,6 +749,204 @@ async function route(request, response) {
         limit: Number(url.searchParams.get('limit') ?? 20)
       })
     });
+  }
+
+  if (request.method === 'GET' && url.pathname === '/tools') {
+    const session = optionalBearer(request, ['tools:read']);
+    return send(response, 200, {
+      tools: system.tools.listTools()
+    });
+  }
+
+  if (request.method === 'GET' && url.pathname === '/tools/help') {
+    const session = optionalBearer(request, ['tools:read']);
+    const toolName = url.searchParams.get('tool');
+    const help = await system.tools.execute({
+      toolName: 'help',
+      parameters: { tool: toolName },
+      actor: actor(request, session),
+      requestId: randomUUID()
+    });
+    return send(response, 200, help.result);
+  }
+
+  if (request.method === 'POST' && url.pathname === '/tools/execute') {
+    const session = bearer(request, ['tools:exec']);
+    const execution = await system.tools.execute({
+      toolName: json.toolName,
+      parameters: json.parameters,
+      actor: actor(request, session),
+      requestId: randomUUID()
+    });
+    return send(response, 200, {
+      executionId: execution.id,
+      toolName: execution.toolName,
+      result: execution.result,
+      status: execution.status,
+      latencyMs: execution.latencyMs
+    });
+  }
+
+  if (request.method === 'GET' && url.pathname === '/tools/history') {
+    const session = bearer(request, ['tools:read']);
+    return send(response, 200, {
+      history: system.tools.getHistory({
+        limit: Number(url.searchParams.get('limit') ?? 50),
+        toolName: url.searchParams.get('tool') ?? undefined,
+        actor: actor(request, session)
+      })
+    });
+  }
+
+  if (request.method === 'GET' && url.pathname === '/models/champions') {
+    const limit = Number(url.searchParams.get('limit') ?? 5);
+    return send(response, 200, {
+      champions: system.modelRouter.getBangForBuckChampions(limit)
+    });
+  }
+
+  if (request.method === 'GET' && url.pathname === '/models/stats') {
+    return send(response, 200, {
+      stats: system.modelRouter.getAllModelStats()
+    });
+  }
+
+  if (request.method === 'GET' && url.pathname === '/models/recommend') {
+    const tier = url.searchParams.get('tier') ?? 'balanced';
+    return send(response, 200, {
+      recommended: system.modelRouter.getRecommendedModelsByTier(tier)
+    });
+  }
+
+  if (request.method === 'GET' && url.pathname === '/models/optimal') {
+    const promptLength = Number(url.searchParams.get('promptLength') ?? 100);
+    const requiresHighQuality = url.searchParams.get('highQuality') === 'true';
+    const requiresSpeed = url.searchParams.get('speed') === 'true';
+    const budget = url.searchParams.get('budget') ? Number(url.searchParams.get('budget')) : undefined;
+    
+    const optimal = system.modelRouter.getOptimalModelForRequest({
+      promptLength,
+      requiresHighQuality,
+      requiresSpeed,
+      budget
+    });
+    
+    return send(response, 200, {
+      optimal,
+      constraints: { promptLength, requiresHighQuality, requiresSpeed, budget }
+    });
+  }
+
+  // PAES: Role Management Endpoints
+  if (request.method === 'GET' && url.pathname === '/permissions/roles') {
+    const session = bearer(request, ['admin']);
+    return send(response, 200, {
+      roles: Array.from(system.auth.roles.values()).map(role => ({
+        name: role.name,
+        description: role.description,
+        permissions: role.permissions,
+        inherits: role.inherits,
+        admin: role.admin,
+        createdAt: role.createdAt
+      }))
+    });
+  }
+
+  if (request.method === 'POST' && url.pathname === '/permissions/roles') {
+    const session = bearer(request, ['admin']);
+    const role = system.auth.defineRole(json.name, json);
+    await system.audit.append({
+      type: 'permission.role_created',
+      actor: actor(request, session),
+      summary: `Created role ${role.name}.`,
+      metadata: { roleName: role.name, permissions: role.permissions }
+    });
+    return send(response, 201, role);
+  }
+
+  if (request.method === 'POST' && url.pathname === '/permissions/roles/assign') {
+    const session = bearer(request, ['admin']);
+    const user = system.auth.assignRole(json.userId, json.roleName);
+    await system.audit.append({
+      type: 'permission.role_assigned',
+      actor: actor(request, session),
+      summary: `Assigned role ${json.roleName} to user ${json.userId}.`,
+      metadata: { userId: json.userId, roleName: json.roleName }
+    });
+    return send(response, 200, user);
+  }
+
+  if (request.method === 'POST' && url.pathname === '/permissions/roles/remove') {
+    const session = bearer(request, ['admin']);
+    const user = system.auth.removeRole(json.userId, json.roleName);
+    await system.audit.append({
+      type: 'permission.role_removed',
+      actor: actor(request, session),
+      summary: `Removed role ${json.roleName} from user ${json.userId}.`,
+      metadata: { userId: json.userId, roleName: json.roleName }
+    });
+    return send(response, 200, user);
+  }
+
+  if (request.method === 'GET' && url.pathname === '/permissions/effective') {
+    const session = bearer(request, ['auth:read']);
+    const userId = url.searchParams.get('userId') ?? session.user.id;
+    const effective = system.permissions.getEffectivePermissions(userId);
+    return send(response, 200, effective);
+  }
+
+  if (request.method === 'POST' && url.pathname === '/permissions/grant') {
+    const session = bearer(request, ['admin']);
+    const user = await system.permissions.grantPermission({
+      userId: json.userId,
+      permission: json.permission,
+      resourceContext: json.resourceContext
+    });
+    return send(response, 200, user);
+  }
+
+  if (request.method === 'POST' && url.pathname === '/permissions/revoke') {
+    const session = bearer(request, ['admin']);
+    const user = await system.permissions.revokePermission({
+      userId: json.userId,
+      permission: json.permission
+    });
+    return send(response, 200, user);
+  }
+
+  if (request.method === 'GET' && url.pathname === '/permissions/policies') {
+    const session = bearer(request, ['admin']);
+    return send(response, 200, {
+      policies: system.permissions.listPolicies()
+    });
+  }
+
+  if (request.method === 'POST' && url.pathname === '/permissions/policies') {
+    const session = bearer(request, ['admin']);
+    const policy = system.permissions.registerPolicy(json.name, json);
+    await system.audit.append({
+      type: 'permission.policy_created',
+      actor: actor(request, session),
+      summary: `Created policy ${policy.name}.`,
+      metadata: { policyName: policy.name, effect: policy.effect }
+    });
+    return send(response, 201, policy);
+  }
+
+  if (request.method === 'GET' && url.pathname === '/permissions/stats') {
+    const session = bearer(request, ['admin']);
+    return send(response, 200, system.permissions.getPermissionStats());
+  }
+
+  if (request.method === 'POST' && url.pathname === '/permissions/check') {
+    const session = optionalBearer(request, ['auth:read']);
+    const result = await system.permissions.checkPermission({
+      session,
+      requiredPermissions: json.permissions,
+      resourceContext: json.resourceContext ?? {},
+      policyContext: json.policyContext ?? {}
+    });
+    return send(response, 200, result);
   }
 
   return send(response, 404, { error: { code: 'not_found', message: 'Route not found.' } });

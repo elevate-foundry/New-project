@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { BBIDService } from './bbid.js';
-import { assert } from './errors.js';
+import { AppError, assert } from './errors.js';
 import { id } from './ids.js';
 
 const DEFAULT_SCOPES = ['auth:read', 'money:write', 'webhooks:write'];
@@ -50,6 +50,35 @@ export class AuthService {
     this.bbid = bbid;
     this.users = new Map();
     this.usersByIdentifier = new Map();
+    this.roles = new Map();
+    this.initializeDefaultRoles();
+  }
+
+  initializeDefaultRoles() {
+    // Admin role with full access
+    this.defineRole('admin', {
+      permissions: ['*'],
+      admin: true,
+      description: 'Full system access with all permissions'
+    });
+
+    // Operator role for operational tasks
+    this.defineRole('operator', {
+      permissions: ['tools:read', 'tools:exec', 'tools:help', 'auth:read', 'money:read'],
+      description: 'Can execute tools and read system state'
+    });
+
+    // Auditor role for read-only access
+    this.defineRole('auditor', {
+      permissions: ['tools:read', 'auth:read', 'money:read', 'webhooks:read', 'audit:read'],
+      description: 'Read-only access for auditing'
+    });
+
+    // User role with basic permissions
+    this.defineRole('user', {
+      permissions: ['auth:read'],
+      description: 'Basic user with minimal permissions'
+    });
   }
 
   register({ email, phone, identifier, password, scopes = DEFAULT_SCOPES }) {
@@ -133,7 +162,129 @@ export class AuthService {
       bbidCreated: user.bbidCreated,
       bbidHapticPattern: user.bbidHapticPattern,
       scopes: user.scopes,
+      roles: user.roles ?? [],
       createdAt: user.createdAt
     };
+  }
+
+  checkPermissions(session, requiredPermissions, resourceContext = {}) {
+    if (!session) {
+      throw new AppError(401, 'unauthorized', 'Authentication required for permission check.');
+    }
+
+    const { user, scopes: sessionScopes } = session;
+    const userRoles = user.roles ?? [];
+    // Use scopes from session (JWT) if available, otherwise fall back to user object
+    const userScopes = Array.isArray(sessionScopes) ? sessionScopes : (Array.isArray(user.scopes) ? user.scopes : []);
+
+    // Check direct scopes
+    const missingScopes = requiredPermissions.filter(perm => !userScopes.includes(perm));
+    
+    // Check role-based permissions
+    const rolePermissions = this.getRolePermissions(userRoles);
+    const missingFromRoles = missingScopes.filter(perm => !rolePermissions.includes(perm));
+
+    if (missingFromRoles.length > 0) {
+      throw new AppError(403, 'forbidden', `Missing required permissions: ${missingFromRoles.join(', ')}`);
+    }
+
+    // Check resource-level conditions if provided
+    if (resourceContext && Object.keys(resourceContext).length > 0) {
+      this.checkResourceConditions(user, requiredPermissions, resourceContext);
+    }
+
+    return true;
+  }
+
+  getRolePermissions(roles) {
+    const permissions = new Set();
+    for (const role of roles) {
+      const roleDef = this.roles.get(role);
+      if (roleDef) {
+        (roleDef.permissions ?? []).forEach(perm => permissions.add(perm));
+        // Include inherited permissions
+        if (roleDef.inherits) {
+          const inheritedPerms = this.getRolePermissions(roleDef.inherits);
+          inheritedPerms.forEach(perm => permissions.add(perm));
+        }
+      }
+    }
+    return Array.from(permissions);
+  }
+
+  checkResourceConditions(user, permissions, context) {
+    // Resource ownership check
+    if (context.ownerId && context.ownerId !== user.id) {
+      // Check if user has admin override permission
+      const hasAdmin = user.scopes.includes('admin') || 
+                      (user.roles ?? []).some(role => this.roles.get(role)?.admin);
+      if (!hasAdmin) {
+        throw new AppError(403, 'forbidden', 'Resource ownership required.');
+      }
+    }
+
+    // Time-based restrictions
+    if (context.timeRestricted) {
+      const now = this.now();
+      const hour = now.getHours();
+      if (context.allowedHours && !context.allowedHours.includes(hour)) {
+        throw new AppError(403, 'forbidden', 'Action not allowed at this time.');
+      }
+    }
+
+    // IP-based restrictions (if context provides IP)
+    if (context.allowedIps && context.clientIp) {
+      if (!context.allowedIps.some(ip => this.matchIp(context.clientIp, ip))) {
+        throw new AppError(403, 'forbidden', 'Action not allowed from this IP.');
+      }
+    }
+  }
+
+  matchIp(clientIp, pattern) {
+    // Simple IP matching - can be enhanced with CIDR support
+    return clientIp === pattern || pattern === '0.0.0.0/0';
+  }
+
+  assignRole(userId, roleName) {
+    const user = this.users.get(userId);
+    if (!user) {
+      throw new AppError(404, 'user_not_found', 'User not found.');
+    }
+    if (!this.roles.has(roleName)) {
+      throw new AppError(404, 'role_not_found', `Role '${roleName}' not found.`);
+    }
+
+    if (!user.roles) {
+      user.roles = [];
+    }
+    if (!user.roles.includes(roleName)) {
+      user.roles.push(roleName);
+    }
+    return this.publicUser(user);
+  }
+
+  removeRole(userId, roleName) {
+    const user = this.users.get(userId);
+    if (!user) {
+      throw new AppError(404, 'user_not_found', 'User not found.');
+    }
+
+    if (user.roles) {
+      user.roles = user.roles.filter(r => r !== roleName);
+    }
+    return this.publicUser(user);
+  }
+
+  defineRole(name, config) {
+    const role = {
+      name,
+      permissions: config.permissions ?? [],
+      inherits: config.inherits ?? [],
+      admin: config.admin ?? false,
+      description: config.description ?? '',
+      createdAt: this.now().toISOString()
+    };
+    this.roles.set(name, role);
+    return role;
   }
 }

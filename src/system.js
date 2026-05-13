@@ -5,10 +5,13 @@ import { CacheService } from './cache.js';
 import { ConversationService } from './conversations.js';
 // import { GraphService } from './graph.js';
 import { MoneyService } from './money.js';
+import { ModelRouter } from './model-router.js';
 import { OllamaService } from './ollama.js';
 import { OpenRouterService } from './openrouter.js';
+import { PermissionService } from './permissions.js';
 import { ProfileService } from './profiles.js';
 import { RaceStore } from './race-store.js';
+import { ToolHarness } from './tools.js';
 import { WebhookService } from './webhooks.js';
 
 export function createSystem(options = {}) {
@@ -29,6 +32,9 @@ export function createSystem(options = {}) {
     }
   });
   const auth = new AuthService({ ...options.auth, bbid });
+  const permissions = new PermissionService({ auth, audit });
+  const tools = new ToolHarness({ audit, auth, permissions });
+  const modelRouter = new ModelRouter();
   
   // Historical tokens per second tracking
   const tokenSpeedHistory = [];
@@ -49,18 +55,21 @@ export function createSystem(options = {}) {
     return sum / tokenSpeedHistory.length;
   }
   
-  return { 
-    audit, 
-    auth, 
-    bbid, 
-    cache, 
+  return {
+    audit,
+    auth,
+    bbid,
+    cache,
     conversations,
     // graph,
-    money, 
-    ollama, 
-    openrouter, 
-    profiles, 
-    races, 
+    money,
+    modelRouter,
+    ollama,
+    openrouter,
+    permissions,
+    profiles,
+    races,
+    tools,
     webhooks,
     recordTokenSpeed,
     getAverageTokenSpeed

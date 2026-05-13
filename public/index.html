@@ -1,1105 +1,287 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    <title>Sal Chat</title>
-    <style>
-      :root {
-        --bg-primary: #ffffff;
-        --bg-secondary: #f7f7f8;
-        --bg-tertiary: #ececf1;
-        --text-primary: #0d0d0d;
-        --text-secondary: #565869;
-        --border-color: #d1d5db;
-        --accent: #0d6b5f;
-        --accent-light: #e8f5f3;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      html, body {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        width: 100%;
-      }
-
-      body {
-        background: var(--bg-primary);
-        color: var(--text-primary);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
-        display: flex;
-        flex-direction: column;
-      }
-
-      .chat-container {
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-        max-width: 900px;
-        margin: 0 auto;
-        width: 100%;
-      }
-
-      header {
-        border-bottom: 1px solid var(--border-color);
-        padding: 16px 20px;
-        background: var(--bg-primary);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-
-      .header-title {
-        font-size: 18px;
-        font-weight: 600;
-        margin: 0;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-
-      .braid-stream {
-        font-size: 13px;
-        font-weight: 400;
-        max-width: 300px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        font-style: italic;
-        background: linear-gradient(90deg, 
-          hsl(0, 70%, 50%) 0%, 
-          hsl(120, 70%, 50%) 50%, 
-          hsl(240, 70%, 50%) 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        animation: shimmer 2s ease-in-out infinite;
-      }
-
-      .braille-stream {
-        font-size: 18px;
-        font-weight: 600;
-        font-family: "Noto Sans Symbols 2", "DejaVu Sans Mono", "Noto Sans Mono", monospace;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        line-height: 1;
-        letter-spacing: 0;
-        color: var(--text-primary);
-        background: linear-gradient(90deg, 
-          hsl(200, 70%, 50%) 0%, 
-          hsl(280, 70%, 50%) 50%, 
-          hsl(340, 70%, 50%) 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        animation: shimmer 2s ease-in-out infinite;
-        will-change: transform;
-        transform: translateZ(0);
-        max-width: 100%;
-      }
-
-      @keyframes shimmer {
-        0%, 100% {
-          filter: brightness(1);
-        }
-        50% {
-          filter: brightness(1.2);
-        }
-      }
-
-      .header-status {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        font-size: 13px;
-        color: var(--text-secondary);
-      }
-
-      .throughput-meter {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 6px 12px;
-        border-radius: 6px;
-        background: var(--bg-secondary);
-        font-family: "SFMono-Regular", Consolas, monospace;
-        font-size: 12px;
-        font-weight: 600;
-      }
-
-      .throughput-value {
-        color: var(--accent);
-        min-width: 60px;
-        text-align: right;
-      }
-
-      .status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #ef4444;
-      }
-
-      .status-dot.online {
-        background: #10b981;
-      }
-
-      .messages-container {
-        flex: 1;
-        overflow-y: auto;
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-
-      .message {
-        display: flex;
-        gap: 12px;
-        animation: slideIn 0.3s ease-out;
-      }
-
-      @keyframes slideIn {
-        from {
-          opacity: 0;
-          transform: translateY(10px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      .message.user {
-        justify-content: flex-end;
-      }
-
-      .message-avatar {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        background: var(--bg-tertiary);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 14px;
-        font-weight: 600;
-        flex-shrink: 0;
-      }
-
-      .message.user .message-avatar {
-        background: var(--accent);
-        color: white;
-      }
-
-      .message-content {
-        max-width: 70%;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .message.user .message-content {
-        align-items: flex-end;
-      }
-
-      .message-bubble {
-        padding: 12px 16px;
-        border-radius: 12px;
-        line-height: 1.5;
-        word-wrap: break-word;
-      }
-
-      .message.assistant .message-bubble {
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-      }
-
-      .message.user .message-bubble {
-        background: var(--accent);
-        color: white;
-      }
-
-      .message-meta {
-        font-size: 12px;
-        color: var(--text-secondary);
-        padding: 0 4px;
-      }
-
-      .consensus-bar {
-        height: 4px;
-        background: linear-gradient(90deg, var(--bg-tertiary) 0%, var(--accent) 50%, var(--bg-tertiary) 100%);
-        border-radius: 2px;
-        margin-top: 4px;
-      }
-
-      .input-area {
-        border-top: 1px solid var(--border-color);
-        padding: 16px 20px;
-        background: var(--bg-primary);
-      }
-
-      .input-form {
-        display: flex;
-        gap: 12px;
-        align-items: flex-end;
-      }
-
-      textarea {
-        flex: 1;
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 12px 16px;
-        font-family: inherit;
-        font-size: 15px;
-        resize: none;
-        max-height: 120px;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-      }
-
-      textarea:focus {
-        outline: none;
-        border-color: var(--accent);
-        box-shadow: 0 0 0 2px var(--accent-light);
-      }
-
-      button {
-        padding: 10px 16px;
-        border: none;
-        border-radius: 8px;
-        background: var(--accent);
-        color: white;
-        cursor: pointer;
-        font-weight: 600;
-        font-size: 14px;
-        transition: opacity 0.2s;
-      }
-
-      button:hover:not(:disabled) {
-        opacity: 0.9;
-      }
-
-      button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      .empty-state {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        gap: 16px;
-        color: var(--text-secondary);
-      }
-
-      .empty-state-icon {
-        font-size: 48px;
-      }
-
-      .empty-state-title {
-        font-size: 18px;
-        font-weight: 600;
-        color: var(--text-primary);
-      }
-
-      .empty-state-subtitle {
-        font-size: 14px;
-        max-width: 300px;
-        text-align: center;
-      }
-
-      .loading {
-        display: flex;
-        gap: 4px;
-        align-items: center;
-      }
-
-      .loading-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--text-secondary);
-        animation: bounce 1.4s infinite;
-      }
-
-      .loading-dot:nth-child(2) {
-        animation-delay: 0.2s;
-      }
-
-      .loading-dot:nth-child(3) {
-        animation-delay: 0.4s;
-      }
-
-      @keyframes bounce {
-        0%, 80%, 100% {
-          opacity: 0.5;
-          transform: translateY(0);
-        }
-        40% {
-          opacity: 1;
-          transform: translateY(-8px);
-        }
-      }
-
-      .thinking-spinner {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 8px 12px;
-        background: var(--bg-secondary);
-        border-radius: 12px;
-        color: var(--text-secondary);
-        font-size: 13px;
-      }
-
-      .spinner-ring {
-        width: 16px;
-        height: 16px;
-        border: 2px solid var(--bg-tertiary);
-        border-top-color: var(--accent);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-      }
-
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-
-      .model-indicator {
-        font-size: 12px;
-        color: var(--text-secondary);
-        margin-top: 4px;
-      }
-
-      .message-timestamp {
-        font-size: 11px;
-        color: var(--text-secondary);
-        margin-top: 6px;
-        font-family: monospace;
-        cursor: help;
-      }
-
-      .message-timestamp:hover::after {
-        content: attr(data-iso);
-        position: absolute;
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-        padding: 4px 8px;
-        border-radius: 4px;
-        white-space: nowrap;
-        font-size: 10px;
-        margin-top: -20px;
-        margin-left: -40px;
-        border: 1px solid var(--border-color);
-        z-index: 1000;
-      }
-
-      .racing-responses {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-        margin-top: 8px;
-        font-size: 12px;
-      }
-
-      .racing-response {
-        padding: 8px;
-        border-radius: 4px;
-        background: var(--bg-secondary);
-        border-left: 3px solid;
-        min-height: 80px;
-        overflow-y: auto;
-        word-wrap: break-word;
-        font-size: 11px;
-        line-height: 1.4;
-        max-height: 150px;
-        position: relative;
-      }
-
-      .racing-response-header {
-        font-weight: bold;
-        font-size: 10px;
-        margin-bottom: 4px;
-        opacity: 0.8;
-      }
-
-      .racing-response-text {
-        white-space: pre-wrap;
-        word-break: break-word;
-      }
-
-      .racing-response.model-0 { border-left-color: hsl(0, 70%, 50%); }
-      .racing-response.model-1 { border-left-color: hsl(120, 70%, 50%); }
-      .racing-response.model-2 { border-left-color: hsl(240, 70%, 50%); }
-
-      @media (max-width: 768px) {
-        .message-content {
-          max-width: 85%;
-        }
-
-        header {
-          padding: 12px 16px;
-        }
-
-        .messages-container {
-          padding: 16px;
-        }
-
-        .input-area {
-          padding: 12px 16px;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="chat-container">
-      <header>
-        <h1 class="header-title">
-          <span>Sal</span>
-          <span class="braille-stream" id="brailleStream"></span>
-        </h1>
-        <div class="header-status">
-          <span class="status-dot online" id="statusDot"></span>
-          <span id="statusText">Ready</span>
-          <div class="throughput-meter">
-            <span>Tokens/sec:</span>
-            <span class="throughput-value" id="throughputValue">—</span>
-          </div>
-          <button id="ttsToggle" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;">
-            🔊 TTS
-          </button>
-          <div style="font-size: 11px; color: var(--text-secondary); font-family: monospace;">
-            BBID: <span id="bbidDisplay" style="color: var(--accent);">—</span>
-          </div>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PAES - Primitive System</title>
+  <base href="/">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      padding: 40px;
+      max-width: 800px;
+      width: 100%;
+    }
+    h1 {
+      color: #764ba2;
+      margin-bottom: 30px;
+      text-align: center;
+    }
+    .logo {
+      display: block;
+      margin: 0 auto 30px;
+      width: 120px;
+      height: 120px;
+    }
+    .section {
+      margin-bottom: 30px;
+    }
+    h2 {
+      color: #667eea;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #555;
+      font-weight: 500;
+    }
+    input, textarea, select {
+      width: 100%;
+      padding: 10px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    .result {
+      background: #f5f5f5;
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 15px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .tabs {
+      display: flex;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #e0e0e0;
+    }
+    .tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      color: #999;
+      transition: all 0.3s;
+    }
+    .tab:hover {
+      color: #667eea;
+    }
+    .tab.active {
+      color: #667eea;
+      border-bottom-color: #667eea;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="paes-logo.svg" alt="PAES Logo" class="logo">
+    <h1>Permissioned Action Execution System</h1>
+    
+    <div class="tabs">
+      <div class="tab active" data-tab="create">Create File</div>
+      <div class="tab" data-tab="read">Read File</div>
+      <div class="tab" data-tab="exec">Execute Command</div>
+    </div>
+    
+    <div id="create" class="tab-content active">
+      <div class="section">
+        <h2>Create File</h2>
+        <div class="form-group">
+          <label>File Path</label>
+          <input type="text" id="create-path" placeholder="example.txt">
         </div>
-      </header>
-
-      <div class="messages-container" id="messagesContainer">
-        <div class="empty-state">
-          <div class="empty-state-icon">💬</div>
-          <div class="empty-state-title">Start a conversation with Sal</div>
-          <div class="empty-state-subtitle">Ask questions about your accounts, transactions, or anything else. Sal runs locally and learns from your BBID.</div>
+        <div class="form-group">
+          <label>Content</label>
+          <textarea id="create-content" rows="4" placeholder="File content..."></textarea>
         </div>
-      </div>
-
-      <div class="input-area">
-        <form class="input-form" id="chatForm">
-          <textarea id="messageInput" placeholder="Message Sal..." rows="1"></textarea>
-          <button type="submit" id="sendButton">Send</button>
-        </form>
+        <button onclick="createFile()">Create File</button>
+        <div id="create-result" class="result" style="display: none;"></div>
       </div>
     </div>
-
-    <script>
-      // Cache busting
-      console.log('Script loaded - version:', Date.now());
+    
+    <div id="read" class="tab-content">
+      <div class="section">
+        <h2>Read File</h2>
+        <div class="form-group">
+          <label>File Path</label>
+          <input type="text" id="read-path" placeholder="example.txt">
+        </div>
+        <div class="form-group">
+          <label>Format</label>
+          <select id="read-format">
+            <option value="text">Text</option>
+            <option value="json">JSON</option>
+            <option value="binary">Binary</option>
+          </select>
+        </div>
+        <button onclick="readFile()">Read File</button>
+        <div id="read-result" class="result" style="display: none;"></div>
+      </div>
+    </div>
+    
+    <div id="exec" class="tab-content">
+      <div class="section">
+        <h2>Execute Command</h2>
+        <div class="form-group">
+          <label>Command</label>
+          <input type="text" id="exec-command" placeholder="ls -la">
+        </div>
+        <button onclick="executeCommand()">Execute</button>
+        <div id="exec-result" class="result" style="display: none;"></div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.tab).classList.add('active');
+      });
+    });
+    
+    async function createFile() {
+      const path = document.getElementById('create-path').value;
+      const content = document.getElementById('create-content').value;
+      const resultDiv = document.getElementById('create-result');
       
-      const state = {
-        bbid: null,
-        bbidDevice: JSON.parse(localStorage.getItem('brailleBuddy.bbid.device') || 'null'),
-        token: localStorage.getItem('primitive.token'),
-        user: JSON.parse(localStorage.getItem('primitive.user') || 'null'),
-        messages: [],
-        isLoading: false,
-        modelColors: {},
-        colorWheelIndex: 0,
-        throughputHistory: [],
-        currentTokenCount: 0,
-        ttsEnabled: true,
-        currentUtterance: null,
-        generationStartTime: null,
-        animationFrameId: null
-      };
-
-      const $ = (id) => document.getElementById(id);
-
-      function bytesToHex(bytes) {
-        return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-      }
-
-      // English to Braille Grade 1 conversion
-      const brailleMap = {
-        'a': '⠁', 'b': '⠃', 'c': '⠉', 'd': '⠙', 'e': '⠑',
-        'f': '⠋', 'g': '⠛', 'h': '⠓', 'i': '⠊', 'j': '⠚',
-        'k': '⠅', 'l': '⠇', 'm': '⠍', 'n': '⠝', 'o': '⠕',
-        'p': '⠏', 'q': '⠟', 'r': '⠗', 's': '⠎', 't': '⠞',
-        'u': '⠥', 'v': '⠧', 'w': '⠺', 'x': '⠭', 'y': '⠽', 'z': '⠵',
-        'A': '⠠⠁', 'B': '⠠⠃', 'C': '⠠⠉', 'D': '⠠⠙', 'E': '⠠⠑',
-        'F': '⠠⠋', 'G': '⠠⠛', 'H': '⠠⠓', 'I': '⠠⠊', 'J': '⠠⠚',
-        'K': '⠠⠅', 'L': '⠠⠇', 'M': '⠠⠍', 'N': '⠠⠝', 'O': '⠠⠕',
-        'P': '⠠⠏', 'Q': '⠠⠟', 'R': '⠠⠗', 'S': '⠠⠎', 'T': '⠠⠞',
-        'U': '⠠⠥', 'V': '⠠⠧', 'W': '⠠⠺', 'X': '⠠⠭', 'Y': '⠠⠽', 'Z': '⠠⠵',
-        '0': '⠼⠴', '1': '⠼⠂', '2': '⠼⠃', '3': '⠼⠆', '4': '⠼⠲',
-        '5': '⠼⠢', '6': '⠼⠖', '7': '⠼⠶', '8': '⠼⠴', '9': '⠼⠔',
-        '.': '⠲', ',': '⠂', '?': '⠦', '!': '⠖', ':': '⠒',
-        ';': '⠆', '-': '⠤', "'": '⠄', '"': '⠐', ' ': ' '
-      };
-
-      function toBraille(text) {
-        return text.split('').map(char => brailleMap[char] || char).join('');
-      }
-
-      function toBrailleSkipCodeBlocks(text) {
-        // Detect code blocks and skip transliterating them
-        const codeBlockPattern = /```[\s\S]*?```/g;
-        const svgPattern = /<svg[\s\S]*?<\/svg>/gi;
-        let result = '';
-        let lastIndex = 0;
-        let match;
-        
-        // Combine patterns to skip both code blocks and SVG
-        const allPatterns = [codeBlockPattern, svgPattern];
-        let matches = [];
-        
-        for (const pattern of allPatterns) {
-          let patternMatch;
-          while ((patternMatch = pattern.exec(text)) !== null) {
-            matches.push({
-              index: patternMatch.index,
-              length: patternMatch[0].length,
-              text: patternMatch[0]
-            });
-          }
-          pattern.lastIndex = 0; // Reset pattern for next use
-        }
-        
-        // Sort matches by index
-        matches.sort((a, b) => a.index - b.index);
-        
-        for (const match of matches) {
-          // Transliterate text before the match
-          result += toBraille(text.slice(lastIndex, match.index));
-          // Add the matched content as-is (not transliterated)
-          result += match.text;
-          lastIndex = match.index + match.length;
-        }
-        
-        // Transliterate any remaining text after the last match
-        result += toBraille(text.slice(lastIndex));
-        
-        return result;
-      }
-
-      async function ensureDeviceBBID() {
-        if (state.bbidDevice) {
-          state.bbid = state.bbidDevice.id;
-          console.log('Restored BBID from localStorage:', state.bbid);
-          return state.bbidDevice;
-        }
-
-        const components = {
-          userAgent: navigator.userAgent,
-          language: navigator.language,
-          languages: navigator.languages,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          platform: navigator.platform,
-          hardwareConcurrency: navigator.hardwareConcurrency,
-          deviceMemory: navigator.deviceMemory,
-          screen: {
-            width: screen.width,
-            height: screen.height,
-            colorDepth: screen.colorDepth,
-            pixelDepth: screen.pixelDepth
+      try {
+        const response = await fetch('http://localhost:3000/tools/execute', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
           },
-          touchPoints: navigator.maxTouchPoints,
-          localStorage: Boolean(window.localStorage)
-        };
-        const encoded = new TextEncoder().encode(JSON.stringify(components));
-        const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', encoded));
-        const raw = bytesToHex(digest);
-        const now = new Date().toISOString();
-        state.bbidDevice = {
-          version: '1.0.0',
-          id: `bbid_${raw.slice(0, 16)}`,
-          metadata: {
-            created: now,
-            modified: now,
-            name: 'Local browser',
-            type: /mobile|android|iphone|ipad/i.test(navigator.userAgent) ? 'phone' : 'desktop',
-            os: navigator.platform || 'other',
-            userAgent: navigator.userAgent
+          body: JSON.stringify({
+            toolName: 'create',
+            parameters: {
+              type: 'file',
+              path: path,
+              content: content
+            }
+          })
+        });
+        
+        const result = await response.json();
+        resultDiv.style.display = 'block';
+        resultDiv.textContent = JSON.stringify(result, null, 2);
+      } catch (error) {
+        resultDiv.style.display = 'block';
+        resultDiv.textContent = 'Error: ' + error.message;
+      }
+    }
+    
+    async function readFile() {
+      const path = document.getElementById('read-path').value;
+      const format = document.getElementById('read-format').value;
+      const resultDiv = document.getElementById('read-result');
+      
+      try {
+        const response = await fetch('http://localhost:3000/tools/execute', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
           },
-          usage: {
-            visitCount: 1,
-            lastSeen: now,
-            mcpCompatible: true
-          }
-        };
-        state.bbid = state.bbidDevice.id;
-        localStorage.setItem('brailleBuddy.bbid.device', JSON.stringify(state.bbidDevice));
-        console.log('Created new BBID:', state.bbid);
-        return state.bbidDevice;
-      }
-
-      function getModelColor(modelName) {
-        if (!state.modelColors[modelName]) {
-          const hue = (state.colorWheelIndex * 60) % 360;
-          state.modelColors[modelName] = `hsl(${hue}, 70%, 50%)`;
-          state.colorWheelIndex++;
-        }
-        return state.modelColors[modelName];
-      }
-
-      function calculateConsensusColor(responses) {
-        if (!responses || responses.length === 0) return 'hsl(0, 0%, 50%)';
-        
-        const colors = responses.map(r => getModelColor(r.model));
-        const canvas = document.createElement('canvas');
-        canvas.width = 1;
-        canvas.height = 1;
-        const ctx = canvas.getContext('2d');
-        
-        ctx.fillStyle = 'rgba(0, 0, 0, 0)';
-        ctx.fillRect(0, 0, 1, 1);
-        
-        for (const color of colors) {
-          ctx.fillStyle = color;
-          ctx.globalAlpha = 1 / colors.length;
-          ctx.fillRect(0, 0, 1, 1);
-        }
-        
-        const imageData = ctx.getImageData(0, 0, 1, 1);
-        const [r, g, b] = imageData.data;
-        return `rgb(${r}, ${g}, ${b})`;
-      }
-
-      async function api(path, options = {}) {
-        const headers = {
-          'content-type': 'application/json',
-          ...(state.bbid ? { 'x-bbid': state.bbid } : {}),
-          ...(state.token ? { authorization: `Bearer ${state.token}` } : {}),
-          ...(options.headers || {})
-        };
-        const response = await fetch(path, { ...options, headers });
-        const body = await response.json();
-        if (!response.ok) {
-          const code = body.error?.code;
-          if (code === 'invalid_token' || code === 'expired_token' || code === 'unknown_user') {
-            localStorage.removeItem('primitive.token');
-            localStorage.removeItem('primitive.user');
-            state.token = null;
-            state.user = null;
-          }
-          throw new Error(body.error?.message || 'Request failed.');
-        }
-        return body;
-      }
-
-      async function loadHealth() {
-        try {
-          const health = await api('/health', { headers: {} });
-          $('statusDot').classList.add('online');
-          $('statusText').textContent = 'Ready';
-        } catch {
-          $('statusDot').classList.remove('online');
-          $('statusText').textContent = 'Offline';
-        }
-      }
-
-      function formatTimestamp(date) {
-        const now = new Date();
-        const diff = now - date;
-        const seconds = Math.floor(diff / 1000);
-        const minutes = Math.floor(seconds / 60);
-        const hours = Math.floor(minutes / 60);
-
-        if (seconds < 60) {
-          return `${seconds}s ago`;
-        } else if (minutes < 60) {
-          return `${minutes}m ago`;
-        } else if (hours < 24) {
-          return `${hours}h ago`;
-        } else {
-          return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-      }
-
-      function renderMessages() {
-        const container = $('messagesContainer');
-        
-        if (state.messages.length === 0) {
-          container.innerHTML = `
-            <div class="empty-state">
-              <div class="empty-state-icon">💬</div>
-              <div class="empty-state-title">Start a conversation with Sal</div>
-              <div class="empty-state-subtitle">Ask questions about your accounts, transactions, or anything else. Sal runs locally and learns from your BBID.</div>
-            </div>
-          `;
-          return;
-        }
-
-        container.innerHTML = state.messages.map((msg, idx) => {
-          if (msg.role === 'user') {
-            return `
-              <div class="message user-message">
-                <div class="message-content">${escapeHtml(msg.content)}</div>
-                <div class="message-meta">
-                  <span class="message-time">${formatTimestamp(msg.timestamp)}</span>
-                </div>
-              </div>
-            `;
-          } else {
-            let racingHtml = '';
-            if (msg.racing && msg.racing.length > 0) {
-              racingHtml = `
-                <div class="racing-responses">
-                  ${msg.racing.map((r, rIdx) => `
-                    <div class="racing-response model-${rIdx}" data-racing-idx="${rIdx}">
-                      <div class="racing-header">
-                        <span class="racing-model">${r.model}</span>
-                        <span class="racing-status">${r.ok ? '✓' : '✗'}</span>
-                      </div>
-                      <div class="racing-response-text">${escapeHtml(r.message || '...')}</div>
-                    </div>
-                  `).join('')}
-                </div>
-              `;
+          body: JSON.stringify({
+            toolName: 'read',
+            parameters: {
+              path: path,
+              format: format
             }
-
-            return `
-              <div class="message assistant-message">
-                <div class="message-header">
-                  <span class="message-role">Sal</span>
-                  <span class="message-model">${msg.modelInfo || 'Loading...'}</span>
-                </div>
-                <div class="message-content">${escapeHtml(msg.content) || '<div class="thinking-spinner"><div class="spinner-ring"></div><span>Thinking...</span></div>'}</div>
-                ${racingHtml}
-                <div class="message-meta">
-                  <span class="message-time">${formatTimestamp(msg.timestamp)}</span>
-                </div>
-              </div>
-            `;
-          }
-        }).join('');
-      }
-
-      function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-      }
-
-      function updateThroughput() {
-        if (!state.generationStartTime || !state.isLoading) {
-          return;
-        }
-
-        const elapsedMs = performance.now() - state.generationStartTime;
-        const tokensPerSecond = (state.currentTokenCount / elapsedMs) * 1000;
-        
-        state.throughputHistory.push({
-          timestamp: performance.now(),
-          tokensPerSec: tokensPerSecond
-        });
-
-        if (state.throughputHistory.length > 60) {
-          state.throughputHistory.shift();
-        }
-
-        const displayValue = tokensPerSecond.toFixed(1);
-        $('throughputValue').textContent = displayValue;
-
-        if (state.isLoading) {
-          state.animationFrameId = requestAnimationFrame(updateThroughput);
-        }
-      }
-
-      function countTokens(text) {
-        return Math.ceil(text.split(/\s+/).length * 1.3);
-      }
-
-      async function sendMessage() {
-        const input = $('messageInput');
-        const message = input.value.trim();
-        
-        if (!message || state.isLoading) return;
-
-        const userMessageTime = new Date();
-        state.messages.push({
-          role: 'user',
-          content: message,
-          timestamp: userMessageTime
+          })
         });
         
-        input.value = '';
-        input.style.height = 'auto';
-        renderMessages();
-
-        state.isLoading = true;
-        state.currentTokenCount = 0;
-        state.generationStartTime = performance.now();
-        $('sendButton').disabled = true;
-        $('throughputValue').textContent = '0.0';
-        $('brailleStream').textContent = '';
-        
-        const assistantMessageIndex = state.messages.length;
-        state.messages.push({
-          role: 'assistant',
-          content: '',
-          modelInfo: 'Streaming...',
-          timestamp: new Date()
-        });
-        console.log('Added assistant message at index:', assistantMessageIndex, 'Total messages:', state.messages.length);
-        renderMessages();
-        
-        updateThroughput();
-
-        try {
-          const useHybrid = Math.random() < 0.3;
-          const response = await fetch('/ai/stream', {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              ...(state.bbid ? { 'x-bbid': state.bbid } : {}),
-              ...(state.token ? { authorization: `Bearer ${state.token}` } : {})
-            },
-            body: JSON.stringify({ prompt: message, hybrid: useHybrid })
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = '';
-          let model = '';
-          let tokensPerSecond = 0;
-          let braidModel = '';
-          let braidStarting = false;
-          console.log('Starting SSE reading...');
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                try {
-                  const data = JSON.parse(line.slice(6));
-                  console.log('Received SSE data:', Object.keys(data));
-                  
-                  if (data.error) {
-                    state.messages[assistantMessageIndex].content = `Error: ${data.error}`;
-                    break;
-                  }
-
-                  if (data.token) {
-                    state.messages[assistantMessageIndex].content += data.token;
-                    state.currentTokenCount = data.tokenCount;
-                    model = data.model;
-                  }
-
-                  if (data.racing && data.racing.length > 0) {
-                    state.messages[assistantMessageIndex].racing = data.racing;
-                  }
-
-                  if (data.done) {
-                    tokensPerSecond = data.tokensPerSecond || 0;
-                    braidStarting = data.braidStarting || false;
-                    let modeLabel = '';
-                    if (data.cached) {
-                      modeLabel = ' [cached ⚡]';
-                    } else if (braidStarting) {
-                      modeLabel = ' [braiding ✨]';
-                    }
-                    
-                    console.log('Done event - assistantMessageIndex:', assistantMessageIndex, 'state.messages.length:', state.messages.length);
-                    
-                    // Use 'final' field if available, otherwise fall back to 'fullMessage' for backward compatibility
-                    const userFacingMessage = data.final || data.fullMessage;
-                    
-                    // Speak the complete message if TTS is enabled
-                    if (userFacingMessage) {
-                      speakText(userFacingMessage);
-                    }
-                    
-                    // Use final/fullMessage if no tokens were streamed (non-streaming endpoint)
-                    if (userFacingMessage && !state.messages[assistantMessageIndex].content) {
-                      state.messages[assistantMessageIndex].content = userFacingMessage;
-                      console.log('Set message content from final/fullMessage, length:', userFacingMessage.length);
-                    }
-                    
-                    state.messages[assistantMessageIndex].modelInfo = 
-                      `${model} (${tokensPerSecond.toFixed(1)} tok/s)${modeLabel}`;
-                    
-                    // Show braille in header for the complete response (skip code blocks)
-                    if (userFacingMessage && !data.braidFullMessage) {
-                      const brailleText = toBrailleSkipCodeBlocks(userFacingMessage);
-                      console.log('Setting braille stream, length:', brailleText.length);
-                      const brailleStream = document.getElementById('brailleStream');
-                      if (brailleStream) {
-                        brailleStream.textContent = brailleText;
-                        console.log('Braille set successfully, current length:', brailleStream.textContent.length);
-                      } else {
-                        console.log('Braille stream element not found');
-                      }
-                    } else {
-                      console.log('Braille not set - final/fullMessage:', !!userFacingMessage, 'braidFullMessage:', !!data.braidFullMessage);
-                    }
-                  }
-
-                  if (data.braidToken) {
-                    // Stream braille in header
-                    const brailleToken = toBraille(data.braidToken);
-                    $('brailleStream').textContent += brailleToken;
-                    // Also stream English in main message
-                    state.messages[assistantMessageIndex].content += data.braidToken;
-                    state.currentTokenCount = data.braidTokenCount || state.currentTokenCount;
-                    braidModel = data.braidModel || braidModel;
-                  }
-
-                  if (data.braidDone) {
-                    console.log('Braid done - clearing braille stream');
-                    $('brailleStream').textContent = '';
-                    // Use braidFinal if available, otherwise fall back to braidFullMessage
-                    const braidUserMessage = data.braidFinal || data.braidFullMessage;
-                    if (braidUserMessage) {
-                      state.messages[assistantMessageIndex].content = braidUserMessage;
-                      state.messages[assistantMessageIndex].modelInfo = 
-                        `${braidModel} (braided ✨)`;
-                    }
-                  }
-
-                  renderMessages();
-                  
-                  if (data.racing && data.racing.length > 0 && !data.done) {
-                    data.racing.forEach((r, idx) => {
-                      const elem = document.querySelector(`[data-racing-idx="${idx}"] .racing-response-text`);
-                      if (elem) {
-                        elem.textContent = r.message || '';
-                        elem.parentElement.scrollTop = elem.parentElement.scrollHeight;
-                      }
-                    });
-                  }
-                } catch (e) {
-                  // Skip invalid JSON
-                }
-              }
+        const result = await response.json();
+        resultDiv.style.display = 'block';
+        resultDiv.textContent = JSON.stringify(result, null, 2);
+      } catch (error) {
+        resultDiv.style.display = 'block';
+        resultDiv.textContent = 'Error: ' + error.message;
+      }
+    }
+    
+    async function executeCommand() {
+      const command = document.getElementById('exec-command').value;
+      const resultDiv = document.getElementById('exec-result');
+      
+      try {
+        const response = await fetch('http://localhost:3000/tools/execute', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            toolName: 'exec',
+            parameters: {
+              command: command
             }
-          }
-
-          $('throughputValue').textContent = tokensPerSecond.toFixed(1);
-        } catch (error) {
-          state.messages[assistantMessageIndex].content = `Error: ${error.message}`;
-          renderMessages();
-        } finally {
-          state.isLoading = false;
-          $('sendButton').disabled = false;
-          $('messageInput').focus();
-          // Don't clear braille stream - keep it displayed
-          // $('brailleStream').textContent = '';
-          if (state.animationFrameId) {
-            cancelAnimationFrame(state.animationFrameId);
-            state.animationFrameId = null;
-          }
-        }
+          })
+        });
+        
+        const result = await response.json();
+        resultDiv.style.display = 'block';
+        resultDiv.textContent = JSON.stringify(result, null, 2);
+      } catch (error) {
+        resultDiv.style.display = 'block';
+        resultDiv.textContent = 'Error: ' + error.message;
       }
-
-      $('chatForm').addEventListener('submit', (e) => {
-        e.preventDefault();
-        sendMessage();
-      });
-
-      $('messageInput').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          sendMessage();
-        }
-      });
-
-      // TTS Toggle
-      $('ttsToggle').addEventListener('click', () => {
-        state.ttsEnabled = !state.ttsEnabled;
-        $('ttsToggle').textContent = state.ttsEnabled ? '🔊 TTS On' : '🔇 TTS Off';
-        $('ttsToggle').style.background = state.ttsEnabled ? 'var(--accent)' : 'var(--bg-tertiary)';
-        $('ttsToggle').style.color = state.ttsEnabled ? 'white' : 'var(--text-primary)';
-        
-        // Stop current speech if disabling
-        if (!state.ttsEnabled && state.currentUtterance) {
-          window.speechSynthesis.cancel();
-          state.currentUtterance = null;
-        }
-      });
-
-      // Initialize TTS button state
-      $('ttsToggle').textContent = state.ttsEnabled ? '🔊 TTS On' : '🔇 TTS Off';
-      $('ttsToggle').style.background = state.ttsEnabled ? 'var(--accent)' : 'var(--bg-tertiary)';
-      $('ttsToggle').style.color = state.ttsEnabled ? 'white' : 'var(--text-primary)';
-
-      function speakText(text) {
-        if (!state.ttsEnabled || !text) return;
-        
-        // Cancel any current speech
-        window.speechSynthesis.cancel();
-        
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-        
-        // Try to use a good voice
-        const voices = window.speechSynthesis.getVoices();
-        const preferredVoice = voices.find(voice => 
-          voice.name.includes('Daniel') || 
-          voice.name.includes('Alex') || 
-          voice.name.includes('Google US English')
-        );
-        if (preferredVoice) {
-          utterance.voice = preferredVoice;
-        }
-        
-        utterance.onend = () => {
-          state.currentUtterance = null;
-        };
-        
-        utterance.onerror = (event) => {
-          console.error('TTS error:', event.error);
-          state.currentUtterance = null;
-        };
-        
-        state.currentUtterance = utterance;
-        window.speechSynthesis.speak(utterance);
-      }
-
-      // Load voices when available
-      if (window.speechSynthesis) {
-        window.speechSynthesis.onvoiceschanged = () => {
-          const voices = window.speechSynthesis.getVoices();
-          console.log('Available TTS voices:', voices.length);
-        };
-      }
-
-      $('messageInput').addEventListener('input', (e) => {
-        e.target.style.height = 'auto';
-        e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-      });
-
-      async function initializeApp() {
-        await ensureDeviceBBID();
-        $('bbidDisplay').textContent = state.bbid ? state.bbid.slice(0, 12) + '...' : 'unknown';
-        loadHealth();
-        renderMessages();
-      }
-
-      initializeApp();
-    </script>
-  </body>
+    }
+  </script>
+</body>
 </html>

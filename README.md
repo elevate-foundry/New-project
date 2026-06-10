@@ -262,3 +262,17 @@ Webhook payloads are signed as `t=<timestamp>,v1=<hex-hmac>` using the endpoint 
 Sessions are HMAC-signed tokens with expiry and scopes. Users can register and log in with either `identifier`, `email`, or `phone`; phone numbers are normalized into a compact E.164-like form. The implementation is intentionally compact, but the module boundaries are meant to be swapped for persistent storage, queues, and real identity providers later.
 
 The Ollama adapter calls `POST /api/chat` with `stream: false` against `OLLAMA_HOST`, defaulting to `http://localhost:11434`. Model calls receive Sal's system identity, BBID state from BrailleBuddy Identity, the authenticated user's public identity when present, account list, and primitive names as context.
+
+<!-- ELEVATE:BEGIN (auto-generated section; edits here are overwritten) -->
+## About
+
+| | |
+| --- | --- |
+| **Description** | _(no description set)_ |
+| **Language** | JavaScript |
+| **Commits** | 7 |
+| **Created** | 2026-05-07 |
+| **Last push** | 2026-05-13 |
+
+Part of [**elevate-foundry**](https://github.com/elevate-foundry) · [repository](https://github.com/elevate-foundry/New-project)
+<!-- ELEVATE:END -->
